@@ -1,4 +1,5 @@
 require 'haml'
+require 'haml2erb'
 
 require 'guard/compat/plugin'
 
@@ -11,8 +12,8 @@ module Guard
 
       opts = {
         notifications:        true,
-        default_ext:          'html',
-        auto_append_file_ext: false,
+        default_ext:          'erb',
+        auto_append_file_ext: true,
         helper_modules:       []
       }.merge(opts)
 
@@ -38,14 +39,14 @@ module Guard
     def run_on_changes(paths)
       paths.each do |file|
         output_paths = _output_paths(file)
-        compiled_haml = compile_haml(file)
+        compiled_haml = compile_haml2erb(file)
 
         output_paths.each do |output_file|
           FileUtils.mkdir_p File.dirname(output_file)
           File.open(output_file, 'w') { |f| f.write(compiled_haml) }
         end
 
-        message = "Successfully compiled haml to html!\n"
+        message = "Successfully compiled haml to erb\n"
         message += "# #{file} -> #{output_paths.join(', ')}".gsub("#{::Bundler.root}/", '')
         Compat::UI.info message
         Notifier.notify(true, message) if options[:notifications]
@@ -53,6 +54,16 @@ module Guard
     end
 
     private
+
+    def compile_haml2erb(file)
+      content = File.new(file).read
+      ::Haml2Erb.convert(content)
+    rescue StandardError => error
+      message = "HAML compilation of #{file} failed!\nError: #{error.message}"
+      Compat::UI.error message
+      Notifier.notify(false, message) if options[:notifications]
+      throw :task_has_failed
+    end
 
     def compile_haml(file)
       content = File.new(file).read
@@ -82,7 +93,7 @@ module Guard
     def _output_paths(file)
       input_file_dir = File.dirname(file)
       file_name = _output_filename(file)
-      file_name = "#{file_name}.html" if _append_html_ext_to_output_path?(file_name)
+      file_name = "#{file_name}.erb" if _append_html_ext_to_output_path?(file_name)
       input_file_dir = input_file_dir.gsub(Regexp.new("#{options[:input]}(\/){0,1}"), '') if options[:input]
 
       if options[:output]
@@ -129,7 +140,7 @@ module Guard
     def _append_html_ext_to_output_path?(filename)
       return unless options[:auto_append_file_ext]
 
-      filename.match("\.html?").nil?
+      filename.match("\.erb?").nil?
     end
   end
 end
